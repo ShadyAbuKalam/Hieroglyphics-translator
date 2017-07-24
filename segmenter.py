@@ -3,6 +3,7 @@ import math
 import cv2
 import numpy as np
 
+from element import Element
 from utils import convert_line_to_polar
 
 
@@ -19,11 +20,12 @@ class Segmenter:
             portions = self.__split_image(image, lines)
         else:
             # or take it as a single portion
-            portions = [image]
+
+            portions = [Element(image, (0, 0))]
 
         i = 0
         for portion in portions:
-            cv2.imshow("Portion {0}".format(i), portion)
+            cv2.imshow("Portion {0}".format(i), portion.image)
             i+=1
             cv2.waitKey()
 
@@ -148,10 +150,12 @@ class Segmenter:
             if (max_x - first_x) < image.shape[1] // 20:
                 continue
             portion = image[:, first_x:max_x]
+            portion = Element(portion, (first_x, 0))
             vertical_portions.append(portion)
             first_x = max_x
 
         portion = image[:, first_x:]
+        portion = Element(portion, (first_x, 0))
         vertical_portions.append(portion)
 
         # Split the vertical portions using the horizontal lines
@@ -161,11 +165,14 @@ class Segmenter:
                 max_y = max(l[1], l[3])
                 if (max_y - first_y) < image.shape[1] // 20:
                     continue
-                portion = v_portion[first_y:max_y, :]
+                portion = v_portion.image[first_y:max_y, :]
                 if portion.size != 0:
+                    portion = Element(portion, (v_portion.location[0], first_y))
                     portions.append(portion)
                 first_y = max_y
-            portion = v_portion[first_y:, :]
+
+            portion = v_portion.image[first_y:, :]
+            portion = Element(portion, (v_portion.location[0], first_y))
             if portion.size != 0:
                 portions.append(portion)
 
