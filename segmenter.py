@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 from element import Element
-from utils import convert_line_to_polar
+from utils import convert_line_to_polar, quantize_color, get_common_color
 
 
 class Segmenter:
@@ -13,38 +13,35 @@ class Segmenter:
 
     def segment(self, image):
         self.original_image = image
-        #Find the splitting lines
+        # Find the splitting lines
         lines = self.__find_lines(image)
         if lines:
-            #Split the image if there are lines
+            # Split the image if there are lines
             portions = self.__split_image(image, lines)
         else:
             # or take it as a single portion
 
             portions = [Element(image, (0, 0))]
 
-        i = 0
         for portion in portions:
-            cv2.imshow("Portion {0}".format(i), portion.image)
-            i+=1
-            cv2.waitKey()
+            self.__color_segment(portion)
 
     def __find_lines(self, image):
         grayImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         edged = cv2.Canny(grayImage, 180, 200)
         lines = []
         for i in range(2):
-            if i == 0: #Vertical lines
-                threshold = image.shape[1]//5
+            if i == 0:  # Vertical lines
+                threshold = image.shape[1] // 5
                 filter_fn = lambda theta: 0.505 * math.pi >= abs(theta) >= 0.495 * math.pi
                 dilate_se = np.zeros((3, 9), dtype=np.uint8)
                 dilate_se[..., 4] = 1
             else:
                 threshold = image.shape[0] // 5
-                filter_fn = lambda theta: abs(theta)<0.05
+                filter_fn = lambda theta: abs(theta) < 0.05
                 dilate_se = np.zeros((9, 3), dtype=np.uint8)
                 dilate_se[4, ...] = 1
-            dilated = cv2.dilate(edged,dilate_se)
+            dilated = cv2.dilate(edged, dilate_se)
             hp_lines = cv2.HoughLinesP(dilated, 1, math.pi / 180, threshold=threshold, minLineLength=threshold)
 
             polar_lines = []
@@ -177,3 +174,45 @@ class Segmenter:
                 portions.append(portion)
 
         return portions
+    def __color_segment(self, element):
+        """
+
+        :rtype: list
+        :param element: Element
+        :return: elements
+        """
+        image = element.image
+        temp = image.copy()
+
+        temp = quantize_color(temp)
+        color = get_common_color(temp)
+        for i in range(image.shape[0]):
+            for j in range(image.shape[1]):
+                pixel = temp[i, j, :]
+                match = [x for x, y in zip(pixel, color) if x == y]
+                if len(match) == 3:
+                    temp[i, j, :] = 0
+                else:
+                    temp[i, j, :] = 255
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        temp = cv2.dilate(temp, kernel)
+        temp = temp[:, :, 0]
+
+        num_labels, labels, stats = cv2.connectedComponentsWithStats(temp)[0:3]
+        elements = []
+        for i in range(num_labels):
+            stat = stats[i]
+            top = stat[cv2.CC_STAT_TOP]
+            left = stat[cv2.CC_STAT_LEFT]
+            width = stat[cv2.CC_STAT_WIDTH]
+            height = stat[cv2.CC_STAT_HEIGHT]
+            portion = image[top:top + height, left:left + width, :]
+            # If there is enclosing box it will be detected as connected shape so if there is portion with size of
+            # 90% or more of the original size, neglect it
+            if (height * width) / (element.shape[0] * element.shape[1]) > 0.9:
+                continue
+            else:
+                e = Element(portion, (element.x + left, element.y + top))
+                elements.append(e)
+
+        return elements

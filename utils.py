@@ -1,4 +1,9 @@
 import math
+import operator
+import random
+
+import cv2
+import numpy as np
 
 
 def convert_line_to_polar(x1, y1, x2, y2):
@@ -11,9 +16,9 @@ def convert_line_to_polar(x1, y1, x2, y2):
     elif y1 == y2:
         rho = y1
         if y1 >= 0:
-            theta = math.pi/2
+            theta = math.pi / 2
         else:
-            theta = 1.5*math.pi
+            theta = 1.5 * math.pi
 
     else:
         theta = math.atan2(y1 - y2, x1 - x2) - math.pi / 2
@@ -33,6 +38,39 @@ def convert_line_to_polar(x1, y1, x2, y2):
     while theta > 2 * math.pi:
         theta -= 2 * math.pi
     return rho, theta
+
+
+def quantize_color(image, k=2):
+    Z = image.reshape((-1, 3))
+
+    # convert to np.float32
+    Z = np.float32(Z)
+
+    # define criteria, number of clusters(K) and apply kmeans()
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+    ret, label, center = cv2.kmeans(Z, k, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+
+    # Now convert back into uint8, and make original image
+    center = np.uint8(center)
+    res = center[label.flatten()]
+    return res.reshape(image.shape)
+
+
+def get_common_color(image, quantize=False):
+    if quantize:
+        image = quantize_color(image)
+    hist = {}
+    for i in range(100):
+        pixel = image[random.randint(0, image.shape[0] - 1), random.randint(0, image.shape[1] - 1), :].tolist()
+        pixel = [str(i) for i in pixel]
+        pixel = ':'.join(pixel)
+
+        hist[pixel] = hist.get(pixel, 0) + 1
+
+    k = max(hist.items(), key=operator.itemgetter(1))[0]
+    color = k.split(':')
+    color = [int(i) for i in color]
+    return color
 
 
 if __name__ == "__main__":
