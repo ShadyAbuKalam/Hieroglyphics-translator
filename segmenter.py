@@ -22,10 +22,16 @@ class Segmenter:
             # or take it as a single portion
 
             portions = [Element(image, (0, 0))]
+        temp = []
+        for portion in portions:
+            temp.extend(self.__color_segment(portion))
+
+        portions = temp
 
         for portion in portions:
-            self.__color_segment(portion)
-
+            cv2.rectangle(self.original_image,(portion.x,portion.y),(portion.x+portion.width,portion.y+portion.height),(255,0,255))
+        cv2.imshow("Image",self.original_image)
+        cv2.waitKey(0)
     def __find_lines(self, image):
         grayImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         edged = cv2.Canny(grayImage, 180, 200)
