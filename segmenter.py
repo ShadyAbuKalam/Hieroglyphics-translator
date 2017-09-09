@@ -223,6 +223,67 @@ class Segmenter:
 
         elements = self.__filter_portions(elements,element)
         return join_elements(elements, element)
+    def __morpholgical_segment(self, portion):
+        img = portion.image
+        # 1. Up-sample the image
+        img = cv2.pyrUp(img)
+
+        # 2. Find Gaussian Blur
+        img = cv2.GaussianBlur(img, (5, 5), 5)
+
+        # 3. Find OTSU threshold & apply Canny
+        th, bw1 = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
+
+        bw1 = cv2.Canny(img, th, th / 2, apertureSize=5, L2gradient=True)
+        bw2 = cv2.Canny(img, th, th / 2, apertureSize=3, L2gradient=True)  # less noisy version
+        # 4. Apply Hit or miss morpholgical operation to connect broken lines
+        kernels = [
+            np.array([[0, 0, 1], [0, 0, 0], [0, 0, 0]]),
+            # np.array([[1, 0, 0], [0, -1, 0], [0, 0, 0]])
+
+        ]
+        for kernel in kernels:
+            hitmiss = cv2.morphologyEx(bw1, cv2.MORPH_HITMISS, kernel)
+
+            bw1 = cv2.bitwise_or(hitmiss, bw1)
+
+        # 5. apply morphological reconstruction to less noisy image using the modified noisy image */
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        prevMu = 0.0
+        recons = np.copy(bw2)
+        for i in range(200):
+
+            recons = cv2.dilate(recons, kernel)
+            recons &= bw1
+            mu = np.mean(recons)
+            if abs(mu - prevMu) < 0.001:
+                break
+
+            prevMu = mu
+
+
+
+        num_labels, labels, stats = cv2.connectedComponentsWithStats(recons)[0:3]
+        elements = []
+        for i in range(num_labels):
+            stat = stats[i]
+            top = stat[cv2.CC_STAT_TOP] // 2
+            left = stat[cv2.CC_STAT_LEFT] // 2
+            width = stat[cv2.CC_STAT_WIDTH] // 2
+            height = stat[cv2.CC_STAT_HEIGHT] // 2
+            subportion = img[top:top + height, left:left + width, :]
+            # If there is enclosing box it will be detected as connected shape so if there is portion with size of
+            # 90% or more of the original size, neglect it
+            if (height * width) / (portion.shape[0] * portion.shape[1]) > 0.9:
+                continue
+            else:
+                e = Element(subportion, (portion.x + left, portion.y + top))
+                elements.append(e)
+
+        elements = self.__filter_portions(elements,portion)
+
+        return join_elements(elements, portion)
+
     @staticmethod
     def __filter_portions(elements, parent_portion):
         avg_width = np.mean([e.width for e in elements])
