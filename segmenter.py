@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 from element import Element
-from utils import convert_line_to_polar, quantize_color, get_common_color
+from utils import convert_line_to_polar, quantize_color, get_common_color, join_elements
 
 
 class Segmenter:
@@ -221,4 +221,26 @@ class Segmenter:
                 e = Element(portion, (element.x + left, element.y + top))
                 elements.append(e)
 
+        elements = self.__filter_portions(elements,element)
+        return join_elements(elements, element)
+    @staticmethod
+    def __filter_portions(elements, parent_portion):
+        avg_width = np.mean([e.width for e in elements])
+        avg_height = np.mean([e.height for e in elements])
+        if parent_portion.width / parent_portion.height > 2:
+            w_tolerence = parent_portion.width // 5
+            h_tolerence = parent_portion.height
+        elif parent_portion.height / parent_portion.width > 2:
+            w_tolerence = parent_portion.width
+            h_tolerence = parent_portion.height // 5
+        elif 1.05 >= parent_portion.height / parent_portion.width >= 0.95:
+            w_tolerence = parent_portion.width // 5
+            h_tolerence = parent_portion.height // 5
+        else:
+            w_tolerence = parent_portion.width
+            h_tolerence = parent_portion.height
+        elements = filter(lambda
+                              e: avg_width + w_tolerence >= e.width >= avg_width - w_tolerence and avg_height + h_tolerence >= e.height >= avg_height - h_tolerence,
+                          elements)
+        elements = list(elements)
         return elements
