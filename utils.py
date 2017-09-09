@@ -5,6 +5,8 @@ import random
 import cv2
 import numpy as np
 
+from element import Element
+
 
 def convert_line_to_polar(x1, y1, x2, y2):
     if x1 == x2:
@@ -71,6 +73,62 @@ def get_common_color(image, quantize=False):
     color = k.split(':')
     color = [int(i) for i in color]
     return color
+
+
+def intersect(e1, e2):
+    """
+    Checks if two picture elements intersect
+
+    :param e1: Element
+    :param e2: Element
+    :return: True for intersection, otherwise no
+    :rtype: bool
+    """
+    no_intersect = e1.x + e1.width < e2.x or e2.x + e2.width < e1.x or e1.y + e1.height < e2.y or e2.y + e2.height < e1.y
+    return not no_intersect
+
+
+def join_elements(elements, original_portion) :
+    """
+
+    :rtype: list of Element
+    :param elements:
+    :param original_portion: Element
+    :return: A list of elements where all intersected elements are joined together
+    """
+    while True:
+        changed = False
+
+        for i in range(len(elements)):
+            if elements[i] is None:
+                continue
+            else:
+                e1 = elements[i]
+            for j in range(i + 1, len(elements)):
+                if elements[j] is None:
+                    continue
+                else:
+                    e2 = elements[j]
+
+                if intersect(e1, e2):
+                    x_points = [e1.x, e1.x + e1.width, e2.x, e2.x + e2.width]
+                    y_points = [e1.y, e1.y + e1.height, e2.y, e2.y + e2.height]
+                    start_x = min(x_points)
+                    width = max(x_points) - start_x
+
+                    start_y = min(y_points)
+                    height = max(y_points) - start_y
+                    subportion = original_portion.image[
+                                 start_y - original_portion.y:start_y - original_portion.y + height,
+                                 start_x - original_portion.x:start_x + width - original_portion.x, :]
+
+                    elements[i] = Element(subportion, (start_x, start_y))
+                    elements[j] = None
+                    changed = True
+        if not changed:
+            break
+    return list(filter(lambda e:e is not None,elements))
+
 
 
 if __name__ == "__main__":
